@@ -1,0 +1,146 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  WORKER
+}
+
+enum ContractStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum ActivityStatus {
+  UNASSIGNED
+  SCHEDULED
+  IN_PROGRESS
+  DONE
+  VERIFIED
+  INVOICED
+}
+
+enum InvoiceType {
+  CLIENT_BILL
+  WORKER_PAYOUT
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+}
+
+model User {
+  id          String   @id @default(uuid())
+  name        String
+  role        UserRole
+  email       String   @unique
+  hourlyRate  Float
+  specialty   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  activities  Activity[]
+  invoices    Invoice[] @relation("WorkerInvoices")
+
+  @@map("users")
+}
+
+model Client {
+  id          String   @id @default(uuid())
+  name        String
+  contactName String
+  email       String
+  billingRate Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  contracts   Contract[]
+  activities  Activity[]
+  invoices    Invoice[] @relation("ClientInvoices")
+
+  @@map("clients")
+}
+
+model Contract {
+  id          String         @id @default(uuid())
+  clientId    String
+  orderNumber String
+  totalHours  Float
+  startDate   DateTime
+  endDate     DateTime
+  status      ContractStatus @default(ACTIVE)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Relations
+  client      Client     @relation(fields: [clientId], references: [id])
+  activities  Activity[]
+
+  @@unique([clientId, orderNumber])
+  @@map("contracts")
+}
+
+model Activity {
+  id            String         @id @default(uuid())
+  title         String
+  contractId    String?
+  clientId      String
+  workerId      String?
+  status        ActivityStatus @default(UNASSIGNED)
+  scheduledStart DateTime
+  scheduledEnd   DateTime
+  durationHours  Float         // Calculated: scheduledEnd - scheduledStart
+  location      String
+  description   String?
+  evidenceUrl   String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  contract      Contract?  @relation(fields: [contractId], references: [id])
+  client        Client     @relation(fields: [clientId], references: [id])
+  worker        User?      @relation(fields: [workerId], references: [id])
+
+  @@index([status])
+  @@index([workerId])
+  @@index([clientId])
+  @@index([scheduledStart])
+  @@map("activities")
+}
+
+model Invoice {
+  id          String        @id @default(uuid())
+  type        InvoiceType
+  entityId    String        // Can be clientId or workerId
+  totalAmount Float
+  generatedAt DateTime      @default(now())
+  periodStart DateTime
+  periodEnd   DateTime
+  status      InvoiceStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations (polymorphic - use separate nullable fields)
+  clientId    String?
+  workerId    String?
+  client      Client? @relation("ClientInvoices", fields: [clientId], references: [id])
+  worker      User?   @relation("WorkerInvoices", fields: [workerId], references: [id])
+
+  @@index([type, entityId])
+  @@index([status])
+  @@index([clientId])
+  @@index([workerId])
+  @@map("invoices")
+}
+
