@@ -1,0 +1,327 @@
+---
+alwaysApply: true
+---
+
+
+# Gecko - Sistema de Gestión de Riesgos y Actividades (Contractor SaaS MVP)
+
+## 1. Resumen Ejecutivo
+Creación de una plataforma SaaS MVP para empresas de gestión de riesgos (SST) que funcionan bajo modelo de contratistas. El objetivo es digitalizar la asig@nación de actividades, el seguimiento de horas, la programación (calendario) y la facturación automatizada tanto para clientes como para el pago de nómina/servicios a los trabajadores.
+
+## 2. Contexto y Problema
+Actualmente, el proceso se maneja manualmente (hojas de cálculo, correos, papel).
+*   **Entradas:** Órdenes de servicio (Capacitaciones, Simulacros, Charlas).
+*   **Actores:** Administradores, Trabajadores (Profesionales), Clientes (Empresas).
+*   **Dolores:** Dificultad para cuadrar agendas, pérdida de trazabilidad de horas ejecutadas vs. contratadas, y procesos de facturación manuales propensos a errores.
+
+## 3. Stack Tecnológico (Definido)
+*   **Frontend:** React (Vite), React Router Dom.
+*   **UI Library:** Shadcn/UI + Tailwind CSS (para velocidad y estética limpia).
+*   **Backend:** Node.js (Express o Fastify).
+*   **Base de Datos:** **PostgreSQL** (Elegido sobre Mongo por la naturaleza relacional de las facturas, horas y reportes financieros).
+*   **ORM:** Prisma (Recomendado para Cursor por su fuerte tipado).
+*   **Infraestructura:** Docker + Docker Compose.
+
+---
+
+## 4. Modelo de Datos (Schema Design)
+*Instrucción para la IA: Usar este esquema como referencia para crear los modelos de Prisma/SQL.*
+
+### A. Users (Workers/Admins)
+*   `id`: UUID
+*   `name`: String (ej. Wilder Marzal)
+*   `role`: Enum (ADMIN, WORKER)
+*   `email`: String
+*   `hourlyRate`: Float (Costo hora del trabajador para liquidación interna)
+*   `specialty`: String (ej. Primeros Auxilios, Alturas)
+
+### B. Clients
+*   `id`: UUID
+*   `name`: String (ej. POSITIVA ARL)
+*   `contactName`: String
+*   `email`: String (para envío de facturas)
+*   `billingRate`: Float (Tarifa base por hora cobrada a este cliente - opcional si varía por contrato)
+
+### C. Contracts (Bolsa de Horas)
+*Basado en la nota "100 hrs" del boceto.*
+*   `id`: UUID
+*   `clientId`: FK -> Clients
+*   `orderNumber`: String (ej. AUT.HM 0517)
+*   `totalHours`: Float (ej. 100)
+*   `startDate`: DateTime
+*   `endDate`: DateTime
+*   `status`: Enum (ACTIVE, CLOSED)
+
+### D. Activities (The Core)
+*   `id`: UUID
+*   `title`: String (ej. Capacitación Primeros Auxilios)
+*   `contractId`: FK -> Contracts (Opcional, puede ser directo al cliente)
+*   `workerId`: FK -> Users (Nullable al inicio)
+*   `status`: Enum (UNASSIGNED, SCHEDULED, IN_PROGRESS, DONE, VERIFIED, INVOICED)
+*   `scheduledStart`: DateTime
+*   `scheduledEnd`: DateTime
+*   `durationHours`: Float (Calculado o manual)
+*   `location`: String (ej. Barranquilla, Oficinas Cliente)
+*   `description`: Text
+*   `evidenceUrl`: String (Link a fotos/actas - opcional MVP)
+
+### E. Invoices (Facturas)
+*   `id`: UUID
+*   `type`: Enum (CLIENT_BILL, WORKER_PAYOUT)
+*   `entityId`: FK (ClientId o WorkerId)
+*   `totalAmount`: Float
+*   `generatedAt`: DateTime
+*   `periodStart`: DateTime
+*   `periodEnd`: DateTime
+*   `status`: Enum (DRAFT, SENT, PAID)
+
+---
+
+## 5. Requerimientos Funcionales y Módulos
+
+### 5.1. Dashboard & Métricas (Home)
+*   **KPIs:**
+    *   Horas ejecutadas este mes vs. Horas vendidas.
+    *   Ingresos estimados (Horas ejecutadas * Tarifa Cliente).
+    *   Costo operativo (Horas ejecutadas * Tarifa Trabajador).
+*   **Listas:** Actividades urgentes (próximas a vencer o sin asignar).
+
+### 5.2. Gestión de Actividades (Kanban & List)
+*   **Vista Kanban:** Columnas basadas en `status` (Por asignar -> Programado -> Realizado -> Verificado).
+*   **Quick Add:** Un botón flotante o modal simple (estilo Google Calendar) que pida:
+    *   Cliente / Contrato.
+    *   Tipo de actividad.
+    *   Fecha/Hora.
+    *   Asignar Trabajador (opcional en creación).
+*   **Validación:** Al asignar, verificar que el trabajador no tenga otra actividad en ese rango de horas (prevención de solapamiento).
+
+### 5.3. Calendario (Scheduler)
+*   Vista mensual y semanal.
+*   Debe mostrar bloques de tiempo con el nombre del trabajador y el cliente.
+*   **Color coding:** Diferenciar por estado (Verde=Realizado, Gris=Pendiente, Rojo=Sin asignar).
+*   *Feature KISS:* Drag and drop no es estrictamente necesario en V1, pero la visualización sí.
+
+### 5.4. Módulo de Facturación (Billing)
+*   **Factura Cliente:** Seleccionar Cliente + Rango de Fechas -> Buscar todas las actividades `VERIFIED` -> Generar PDF/Vista con el detalle (Actividad, Fecha, Horas, Valor).
+*   **Pago Trabajador:** Seleccionar Trabajador + Rango de Fechas -> Sumar horas trabajadas -> Generar reporte de pago.
+*   **Control de Saldos:** Al finalizar una actividad, restar automáticamente las horas de la "Bolsa de Horas" del contrato asociado.
+
+---
+
+## 6. Diseño UI/UX (Directrices para Cursor/Shadcn)
+
+*   **Layout:** Sidebar fija a la izquierda (Dashboard, Calendar, Kanban, Invoices, Workers, Clients). Header con perfil de usuario.
+*   **Tarjetas de Actividad (Kanban):** Deben mostrar claramente: ID Orden, Cliente, Trabajador (Avatar), Fecha y Badge de Estado.
+*   **Formularios:** Usar `react-hook-form` + `zod` para validaciones.
+*   **Estilo:** Minimalista, fondo claro, tipografía Sans (Inter).
+
+---
+
+## 7. Instrucciones para la Generación de Código (Prompt Guide)
+
+*Si vas a usar Cursor, puedes copiar y pegar esto en el chat:*
+
+> "Actúa como un arquitecto de software Senior. Vamos a construir un MVP SAAS para gestión de contratistas de riesgo (SST).
+>
+> **Contexto:** Necesito una aplicación React con Shadcn UI y Node.js/Postgres.
+> **Principio:** KISS. Código limpio y modular.
+>
+> **Paso 1:** Genera la configuración de la base de datos (schema.prisma) basada en el modelo de datos definido en el RFC adjunto.
+> **Paso 2:** Crea los componentes de UI básicos para el 'Activity Card' y el 'Kanban Board'.
+> **Paso 3:** Crea el endpoint de backend para 'Crear Actividad' que valide si el contrato tiene horas disponibles.
+>
+> (Adjunta el contenido del RFC arriba)"
+
+---
+
+## 8. Ideas para Dashboards/Métricas (Respuesta a tu pregunta específica)
+
+Para el módulo de métricas, sugiero estos gráficos simples usando una librería como `recharts`:
+
+1.  **"Burndown" de Contratos:** Gráfico de barra simple por cliente.
+    *   Barra total: 100 horas contratadas.
+    *   Barra rellena: 60 horas ejecutadas.
+    *   *Insight:* Permite ver rápidamente qué cliente está próximo a necesitar una renovación de contrato.
+
+2.  **Ocupación de Trabajadores (Heatmap):**
+    *   Similar al de GitHub. Eje Y: Nombres de trabajadores. Eje X: Días del mes.
+    *   Celda coloreada: Intensidad según horas trabajadas ese día.
+    *   *Insight:* Identificar quién está sobrecargado y quién está libre (Bench).
+
+3.  **Revenue vs. Cost (Línea):**
+    *   Línea 1: Ingresos acumulados en el mes (base facturación cliente).
+    *   Línea 2: Costos acumulados (pago a trabajadores).
+    *   *Insight:* Margen bruto en tiempo real.
+
+---
+
+## 9. Notas Adicionales de Implementación
+
+*   **Estado "Verified":** Es importante añadir un paso manual donde un admin confirma que la actividad se hizo (quizás revisando una foto o firma) antes de que pase a "Invoiced". Esto evita errores en facturación.
+*   **Geolocalización (Futuro):** En el MVP, solo guarda el texto de la dirección. En v2, se puede integrar Google Maps API para validar que el trabajador estuvo ahí.
+
+---
+
+## 10. Sistema de Roles y Permisos
+
+*Instrucción para la IA: Implementar autenticación y autorización basada en roles con permisos granulares. Ver RFC 0002 para detalles completos de implementación.*
+
+### 10.1. Roles del Sistema
+
+El sistema define dos roles principales:
+
+#### ADMIN (Administrador)
+*   **Descripción:** Acceso completo a todas las funcionalidades del sistema.
+*   **Responsabilidades:**
+    *   Gestión completa de actividades (crear, editar, eliminar, asignar)
+    *   Gestión de trabajadores y clientes
+    *   Generación y gestión de facturas (clientes y pagos a trabajadores)
+    *   Acceso al dashboard con todas las métricas
+    *   Verificación de actividades completadas
+    *   Configuración del sistema
+
+#### WORKER (Trabajador/Profesional)
+*   **Descripción:** Acceso limitado a funcionalidades relacionadas con sus propias actividades y pagos.
+*   **Responsabilidades:**
+    *   Ver actividades asignadas a él/ella
+    *   Actualizar estado de sus propias actividades (marcar como completadas, subir evidencia)
+    *   Ver su propio calendario
+    *   Ver sus propios pagos/payouts
+    *   **NO puede:** crear actividades, ver otros trabajadores, gestionar clientes, generar facturas
+
+### 10.2. Permisos Granulares
+
+El sistema implementa un modelo de permisos basado en recursos y acciones (formato: `recurso:accion`):
+
+#### Permisos de Actividades
+*   `activities:read` - Ver actividades
+    *   ADMIN: Todas las actividades
+    *   WORKER: Solo actividades asignadas (`workerId === currentUser.id`)
+*   `activities:create` - Crear nuevas actividades
+    *   ADMIN: ✅
+    *   WORKER: ❌
+*   `activities:update` - Actualizar actividades
+    *   ADMIN: Cualquier actividad
+    *   WORKER: Solo actividades propias, y solo campos limitados (estado, evidencia)
+*   `activities:delete` - Eliminar actividades
+    *   ADMIN: ✅
+    *   WORKER: ❌
+
+#### Permisos de Facturación
+*   `billing:read` - Ver facturas/pagos
+    *   ADMIN: Todas las facturas (clientes y trabajadores)
+    *   WORKER: Solo sus propios pagos (`type === 'WORKER_PAYOUT' AND entityId === currentUser.id`)
+*   `billing:create` - Generar facturas
+    *   ADMIN: ✅
+    *   WORKER: ❌
+*   `billing:update` - Actualizar facturas
+    *   ADMIN: ✅
+    *   WORKER: ❌
+
+#### Permisos de Trabajadores
+*   `workers:read` - Ver lista de trabajadores
+    *   ADMIN: ✅
+    *   WORKER: ❌
+*   `workers:create` - Agregar trabajadores
+    *   ADMIN: ✅
+    *   WORKER: ❌
+*   `workers:update` - Editar información de trabajadores
+    *   ADMIN: ✅
+    *   WORKER: ❌ (puede editar su propio perfil básico)
+*   `workers:delete` - Eliminar trabajadores
+    *   ADMIN: ✅
+    *   WORKER: ❌
+
+#### Permisos de Clientes
+*   `clients:read` - Ver clientes
+    *   ADMIN: ✅
+    *   WORKER: ❌
+*   `clients:create` - Agregar clientes
+    *   ADMIN: ✅
+    *   WORKER: ❌
+*   `clients:update` - Editar información de clientes
+    *   ADMIN: ✅
+    *   WORKER: ❌
+*   `clients:delete` - Eliminar clientes
+    *   ADMIN: ✅
+    *   WORKER: ❌
+
+#### Permisos de Visualización
+*   `dashboard:read` - Ver dashboard con métricas
+    *   ADMIN: ✅
+    *   WORKER: ❌
+*   `calendar:read` - Ver calendario
+    *   ADMIN: Calendario completo (todos los trabajadores)
+    *   WORKER: Solo su propio calendario (actividades asignadas)
+
+### 10.3. Reglas de Implementación
+
+#### Backend (API)
+1. **Todas las rutas API deben estar protegidas** con middleware de autenticación (`authenticateToken`).
+2. **Verificación de permisos:** Usar `requirePermission('permiso:accion')` en rutas sensibles.
+3. **Filtrado por recurso:** Para WORKER, siempre filtrar resultados por `workerId === req.user.id` cuando corresponda.
+4. **Validación de propiedad:** En operaciones de actualización/eliminación, verificar que el recurso pertenece al usuario (para WORKER) o que el usuario tiene permisos (para ADMIN).
+
+**Ejemplo de implementación:**
+```javascript
+// Backend: Obtener actividades
+router.get('/activities', 
+  authenticateToken, 
+  requirePermission('activities:read'),
+  async (req, res) => {
+    const where = req.user.role === 'WORKER' 
+      ? { workerId: req.user.id }
+      : {};
+    const activities = await prisma.activity.findMany({ where });
+    res.json(activities);
+  }
+);
+```
+
+#### Frontend (UI)
+1. **Protección de rutas:** Envolver rutas con componente `RequireAuth` y especificar rol o permiso requerido.
+2. **Elementos condicionales:** Ocultar/mostrar elementos UI basados en permisos usando `useAuth().hasPermission()`.
+3. **Navegación:** Ocultar enlaces del sidebar que el usuario no puede acceder.
+
+**Ejemplo de implementación:**
+```typescript
+// Frontend: Proteger ruta
+<Route 
+  path="/billing" 
+  element={
+    <RequireAuth requiredPermission="billing:read">
+      <BillingPage />
+    </RequireAuth>
+  } 
+/>
+
+// Frontend: Elemento condicional
+{hasPermission('activities:create') && (
+  <Button onClick={handleCreateActivity}>Nueva Actividad</Button>
+)}
+```
+
+### 10.4. Asignación de Roles
+
+*   **Por defecto:** Todos los nuevos usuarios creados vía Google OAuth reciben el rol `WORKER`.
+*   **Promoción a ADMIN:** Debe realizarse manualmente en la base de datos o mediante un proceso administrativo (a implementar en V2).
+*   **Migración:** Usuarios existentes sin rol asignado deben recibir `WORKER` por defecto.
+
+### 10.5. Seguridad y Validación
+
+1. **Validación en múltiples capas:**
+    *   Frontend: Para UX (ocultar elementos no permitidos)
+    *   Backend: Para seguridad real (nunca confiar solo en frontend)
+2. **Principio de menor privilegio:** Los usuarios solo tienen acceso a lo estrictamente necesario para su rol.
+3. **Auditoría:** Todas las acciones deben estar vinculadas al usuario autenticado (`req.user.id`) para trazabilidad.
+4. **Tokens JWT:** Implementar expiración y refresh tokens para seguridad.
+
+### 10.6. Extensibilidad Futura
+
+El sistema de permisos está diseñado para permitir:
+*   Nuevos roles (ej: `MANAGER`, `CLIENT`)
+*   Permisos personalizados por usuario
+*   Permisos a nivel de recurso (ej: un WORKER puede ver actividades de un cliente específico)
+*   Permisos temporales o por proyecto
+
+**Nota:** Para implementación completa, ver RFC 0002: Google Authentication and Authorization.
