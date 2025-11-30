@@ -14,23 +14,5 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: gecko-backend
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      DATABASE_URL: postgresql://gecko:gecko_password@postgres:5432/gecko_db
-      NODE_ENV: development
-      PORT: 3000
-    depends_on:
-      - postgres
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-
 volumes:
   postgres_data:
