@@ -2,6 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import logger from 'morgan';
 import dotenv from 'dotenv';
+import cors from 'cors';
 
 import type { Application } from 'express';
 
@@ -17,6 +18,12 @@ import dashboardRouter from './routes/dashboard';
 dotenv.config();
 
 const app: Application = express();
+
+// CORS configuration
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5174',
+  credentials: true,
+}));
 
 app.use(logger('dev'));
 app.use(express.json());
